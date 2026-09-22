@@ -1,0 +1,6 @@
+reference/
+build/
+install/
+log/
+docs/
+.vscode/

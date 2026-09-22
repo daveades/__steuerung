@@ -1,0 +1,13 @@
+services:
+  dev:
+    image: steuerung:dev
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    volumes:
+      - type: bind
+        source: .
+        target: /workspace
+        
+
+
