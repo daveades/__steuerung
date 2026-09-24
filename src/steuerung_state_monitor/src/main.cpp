@@ -6,19 +6,16 @@
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 
-
-class StateMonitor: public rclcpp::Node
+class StateMonitor : public rclcpp::Node
 {
-    public:
-    StateMonitor():
-        Node("state_monitor")
+public:
+    StateMonitor() : Node("state_monitor")
     {
         subscription_ = this->create_subscription<sensor_msgs::msg::JointState>(
-            "/joint_states", 10, std::bind(&StateMonitor::logJointStates, this, std::placeholders::_1)
-        );
+            "/joint_states", 10, std::bind(&StateMonitor::logJointStates, this, std::placeholders::_1));
     }
-    
-    private:
+
+private:
     void logJointStates(const sensor_msgs::msg::JointState &jointPayload) const
     {
         if (jointPayload.name.empty() || jointPayload.position.empty())
@@ -27,8 +24,7 @@ class StateMonitor: public rclcpp::Node
                 this->get_logger(),
                 "Joint Payload is empty: received %zu joint names and %zu positions.",
                 jointPayload.name.size(),
-                jointPayload.position.size()
-            );
+                jointPayload.position.size());
             return;
         }
         else if (jointPayload.name.size() != jointPayload.position.size())
@@ -37,17 +33,16 @@ class StateMonitor: public rclcpp::Node
                 this->get_logger(),
                 "Joint payload size mismatch: received %zu joint name(s) but %zu position(s).",
                 jointPayload.name.size(),
-                jointPayload.position.size()
-            );
+                jointPayload.position.size());
             return;
         }
 
         std::ostringstream strOut;
 
-        for (std::size_t i {0}; i < jointPayload.position.size(); i++)
+        for (std::size_t i{0}; i < jointPayload.position.size(); i++)
         {
 
-            strOut << "\""<< jointPayload.name[i] << "\"" << ": " << jointPayload.position[i];
+            strOut << "\"" << jointPayload.name[i] << "\"" << ": " << jointPayload.position[i];
 
             if (i != jointPayload.name.size() - 1)
                 strOut << ", ";
@@ -56,9 +51,7 @@ class StateMonitor: public rclcpp::Node
         RCLCPP_INFO(
             this->get_logger(),
             "Joint states: {%s}",
-            strOut.str().c_str()
-        );
-
+            strOut.str().c_str());
     }
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr subscription_;
 };
