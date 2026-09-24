@@ -7,12 +7,14 @@
 class JointStatePublisher : public rclcpp::Node
 {
 public:
-    JointStatePublisher() : Node("joint_state_publisher")
+    JointStatePublisher() : Node("joint_state")
     {
         publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
         timer_ = this->create_wall_timer(
-            std::chrono::milliseconds(100),
+            std::chrono::milliseconds(5),
             std::bind(&JointStatePublisher::reportJointStates, this));
+
+        RCLCPP_INFO(this->get_logger(), "Publishing joint states");
     }
 
 private:
@@ -22,15 +24,33 @@ private:
         return (0);
     }
 
+    const double MAX{0.78450};
+    const double MIN{-0.78450};
+
+    double currentAngle{MIN};
+    int directionSwitch = -1;
+
     void reportJointStates()
     {
         sensor_msgs::msg::JointState fakeJointData;
+        if (currentAngle >= MAX)
+        {
+            currentAngle = MAX;
+            directionSwitch *= -1;
+        }
+        else if (currentAngle <= MIN)
+        {
+            currentAngle = MIN;
+            directionSwitch *= -1;
+        }
 
+        fakeJointData.header.stamp = this->now();
         fakeJointData.name = {"Servo1", "Servo2"};
-        fakeJointData.position = {90.56, 45};
+        fakeJointData.position = {currentAngle, 0.7845};
 
-        RCLCPP_INFO(this->get_logger(), "Publishing joint states");
         publisher_->publish(fakeJointData);
+
+        this->currentAngle += (this->directionSwitch * 0.0005);
     }
     rclcpp::TimerBase::SharedPtr timer_;
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr publisher_;

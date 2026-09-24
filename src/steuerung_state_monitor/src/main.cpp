@@ -37,21 +37,24 @@ private:
             return;
         }
 
-        std::ostringstream strOut;
-
+        std::ostringstream jointString;
+        
         for (std::size_t i{0}; i < jointPayload.position.size(); i++)
         {
 
-            strOut << "\"" << jointPayload.name[i] << "\"" << ": " << jointPayload.position[i];
+            jointString << "\"" << jointPayload.name[i] << "\"" << ": " << jointPayload.position[i];
 
             if (i != jointPayload.name.size() - 1)
-                strOut << ", ";
+                jointString << ", ";
         }
 
         RCLCPP_INFO(
             this->get_logger(),
-            "Joint states: {%s}",
-            strOut.str().c_str());
+
+            "{\"timestamp\": \"%d.%09u\", \"joint_states\": {%s}}",
+            jointPayload.header.stamp.sec,
+            jointPayload.header.stamp.nanosec,
+            jointString.str().c_str());
     }
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr subscription_;
 };
