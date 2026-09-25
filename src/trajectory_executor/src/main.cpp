@@ -14,10 +14,35 @@ public:
         subscriber_ = this->create_subscription<trajectory_msgs::msg::JointTrajectory>(
             "/planned_trajectory", 10,
             std::bind(&JointTrajectory::logJointTrajectory, this, std::placeholders::_1));
+        timer_ = this->create_wall_timer(
+            std::chrono::milliseconds(20),
+            std::bind(&JointTrajectory::startNextTrajectory, this)
+        );
     }
 
 private:
-    void logJointTrajectory(const trajectory_msgs::msg::JointTrajectory &trajectoryPayload) const
+    int newTrajectory {0};
+    trajectory_msgs::msg::JointTrajectory receivedTrajectory;
+    rclcpp::Time startTime;
+    size_t nextPointIndex;
+
+    void startNextTrajectory()
+    {
+        if (!newTrajectory)
+            return;
+        if (nextPointIndex < receivedTrajectory.points.size())
+        {
+            if ((this->now() - startTime) >= rclcpp::Duration(receivedTrajectory.points[nextPointIndex].time_from_start))
+            {
+                RCLCPP_INFO(this->get_logger(), "Point[%zu]", nextPointIndex);
+                nextPointIndex += 1;
+            }
+        }
+        else
+            newTrajectory = 0;
+    }
+
+    void logJointTrajectory(const trajectory_msgs::msg::JointTrajectory &trajectoryPayload)
     {
 
         if (trajectoryPayload.joint_names.empty() || trajectoryPayload.points.empty())
@@ -62,6 +87,11 @@ private:
             }
         }
 
+        this->newTrajectory = 1;
+        receivedTrajectory = trajectoryPayload;
+        startTime = this->now();
+        nextPointIndex = 0;
+
         std::ostringstream strOut;
 
         strOut << "\"Points\": [";
@@ -93,6 +123,7 @@ private:
 
         RCLCPP_INFO(this->get_logger(), "{%s}", strOut.str().c_str());
     }
+    rclcpp::TimerBase::SharedPtr timer_;
     rclcpp::Subscription<trajectory_msgs::msg::JointTrajectory>::SharedPtr subscriber_;
 };
 
