@@ -8,7 +8,12 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rcl_interfaces REQUIRED)
 find_package(sensor_msgs REQUIRED)
+
+add_executable(main src/main.cpp)
+target_link_libraries(main PRIVATE rclcpp::rclcpp rcl_interfaces::rcl_interfaces sensor_msgs::sensor_msgs)
+install(TARGETS main DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
