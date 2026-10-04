@@ -1,6 +1,9 @@
 #include <chrono>
+#include <cstdint>
 #include <functional>
+#include <stdexcept>
 
+#include "rcl_interfaces/msg/parameter_descriptor.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 
@@ -9,12 +12,21 @@ class JointStatePublisher : public rclcpp::Node
 public:
     JointStatePublisher() : Node("joint_state")
     {
+        rcl_interfaces::msg::ParameterDescriptor intervalDescriptor;
+        intervalDescriptor.description = "Publishing interval in milliseconds; set at startup";
+        intervalDescriptor.read_only = true;
+        const auto publishIntervalMs = this->declare_parameter<std::int64_t>(
+            "publish_interval_ms", 5, intervalDescriptor);
+        if (publishIntervalMs <= 0)
+            throw std::invalid_argument("publish_interval_ms must be greater than zero");
+
         publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
         timer_ = this->create_wall_timer(
-            std::chrono::milliseconds(5),
+            std::chrono::milliseconds(publishIntervalMs),
             std::bind(&JointStatePublisher::reportJointStates, this));
 
-        RCLCPP_INFO(this->get_logger(), "Publishing joint states");
+        RCLCPP_INFO(this->get_logger(), "Publishing joint states every %lld ms",
+            static_cast<long long>(publishIntervalMs));
     }
 
 private:
@@ -59,7 +71,16 @@ private:
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<JointStatePublisher>());
+    try
+    {
+        rclcpp::spin(std::make_shared<JointStatePublisher>());
+    }
+    catch (const std::exception &error)
+    {
+        RCLCPP_ERROR(rclcpp::get_logger("joint_state"), "%s", error.what());
+        rclcpp::shutdown();
+        return (1);
+    }
     rclcpp::shutdown();
 
     return (0);
