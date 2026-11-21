@@ -30,12 +30,6 @@ public:
     }
 
 private:
-    auto getJointStates()
-    {
-        /*still empty for now*/
-        return (0);
-    }
-
     const double MAX{0.78450};
     const double MIN{-0.78450};
 
