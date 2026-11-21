@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>dofbot_vision</name>
+  <version>0.0.0</version>
+  <description>Colour detection from saved images, cameras and recorded video.</description>
+  <maintainer email="jesugbohunmi23@gmail.com">dev</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>libopencv-dev</depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>python3</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

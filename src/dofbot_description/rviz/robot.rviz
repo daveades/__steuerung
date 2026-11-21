@@ -1,0 +1,83 @@
+Panels:
+- Class: rviz_common/Displays
+  Name: Displays
+  Property Tree Widget:
+    Expanded:
+    - /RobotModel1
+    - /RobotModel1/Status1
+- Class: rviz_common/Views
+  Name: Views
+Visualization Manager:
+  Class: ""
+  Enabled: true
+  Name: root
+  Value: true
+  Displays:
+  - Class: rviz_default_plugins/Grid
+    Name: Grid
+    Enabled: true
+    Cell Size: 0.05
+    Plane: XY
+  - Class: rviz_default_plugins/RobotModel
+    Name: RobotModel
+    Enabled: true
+    Visual Enabled: true
+    Collision Enabled: false
+    Description Source: Topic
+    Description Topic:
+      Value: /robot_description
+      Reliability Policy: Reliable
+      Durability Policy: Transient Local
+      History Policy: Keep Last
+      Depth: 1
+  - Class: rviz_default_plugins/TF
+    Name: GraspContactFrame
+    Enabled: true
+    Filter (whitelist): ^grasp_contact_frame$
+    Marker Scale: 0.1
+    Show Axes: false
+    Show Arrows: false
+    Show Names: true
+  - Class: rviz_default_plugins/TF
+    Name: GraspFrame
+    Enabled: true
+    Filter (whitelist): ^grasp_frame$
+    Marker Scale: 0.1
+    Show Axes: false
+    Show Arrows: false
+    Show Names: true
+  - Class: rviz_default_plugins/Axes
+    Name: GraspContactAxes
+    Enabled: true
+    Reference Frame: grasp_contact_frame
+    Length: 0.02
+    Radius: 0.0001
+  - Class: rviz_default_plugins/Axes
+    Name: ClosedGraspAxes
+    Enabled: true
+    Reference Frame: grasp_frame
+    Length: 0.02
+    Radius: 0.0001
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: base_link
+  Tools:
+  - Class: rviz_default_plugins/Interact
+  - Class: rviz_default_plugins/MoveCamera
+  - Class: rviz_default_plugins/Select
+  - Class: rviz_default_plugins/FocusCamera
+  - Class: rviz_default_plugins/Measure
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 0.8
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0.2
+      Pitch: 0.5
+      Yaw: 0.8
+      Target Frame: <Fixed Frame>
+Window Geometry:
+  Width: 1200
+  Height: 800

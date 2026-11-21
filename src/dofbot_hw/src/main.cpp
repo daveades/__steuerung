@@ -1,6 +1,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <std_msgs/msg/bool.hpp>
 
 #include <fcntl.h>
 #include <poll.h>
@@ -31,7 +32,7 @@ public:
 		const auto serialPort = declare_parameter<std::string>("port", "/dev/ttyUSB0", startupDescriptor);
 		timeoutMs = declare_parameter<int>("timeout_ms", 200, startupDescriptor);
 		const auto startupDelayMs = declare_parameter<int>("startup_delay_ms", 2000, startupDescriptor);
-		const auto continuous = declare_parameter<bool>("continuous", true, startupDescriptor);
+		continuousMotion = declare_parameter<bool>("continuous_motion", false, startupDescriptor);
 		const auto pollIntervalMs = declare_parameter<int>("poll_interval_ms", 500, startupDescriptor);
 		jointZeros = declare_parameter<std::vector<double>>(
 			"joint_zero_degrees", {90.0, 90.0, 90.0, 90.0, 90.0}, startupDescriptor);
@@ -74,20 +75,28 @@ public:
 		try
 		{
 			configure_serial();
-			RCLCPP_INFO(get_logger(), "Opened %s at 115200 baud", serialPort.c_str());
+			RCLCPP_INFO(get_logger(), "Serial port configured: device=%s, baud=115200", serialPort.c_str());
 			rclcpp::sleep_for(std::chrono::milliseconds(startupDelayMs));
 			if (!rclcpp::ok())
 			{
 				throw std::runtime_error("Startup interrupted");
 			}
-			if (continuous)
-			{
-				feedbackPublisher = create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
-				feedbackTimer = create_wall_timer(
-					std::chrono::milliseconds(pollIntervalMs), [this]() { publish_positions(); });
-				RCLCPP_INFO(get_logger(), "Publishing measured joint positions every %lld ms with candidate joint mapping",
-					static_cast<long long>(pollIntervalMs));
-			}
+			feedbackPublisher = create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
+			sentCommandPublisher = create_publisher<sensor_msgs::msg::JointState>("/joint_command_sent", 10);
+			motionModePublisher = create_publisher<std_msgs::msg::Bool>(
+				"/continuous_motion_enabled", rclcpp::QoS(1).transient_local().reliable());
+			std_msgs::msg::Bool motionMode;
+			motionMode.data = continuousMotion;
+			motionModePublisher->publish(motionMode);
+			feedbackTimer = create_wall_timer(
+				std::chrono::milliseconds(pollIntervalMs), [this]() { publish_positions(); });
+			commandSubscription = create_subscription<sensor_msgs::msg::JointState>(
+				"/joint_commands", rclcpp::QoS(1),
+				[this](const sensor_msgs::msg::JointState &command) { command_joint(command); });
+			RCLCPP_INFO(get_logger(), "Joint feedback polling enabled: interval=%lld ms",
+				static_cast<long long>(pollIntervalMs));
+			RCLCPP_INFO(get_logger(), "Motion command mode: continuous=%s, minimum_interval=%d ms, duration=1000 ms",
+				continuousMotion ? "true" : "false", continuousMotion ? 500 : 2000);
 		}
 		catch (...)
 		{
@@ -99,29 +108,6 @@ public:
 	~ArmDriver() override
 	{
 		close_serial();
-	}
-
-	bool read_positions()
-	{
-		bool successful = true;
-		for (int servoId = 1; servoId <= 6 && rclcpp::ok(); ++servoId)
-		{
-			try
-			{
-				const auto rawPosition = request_servo_position(servoId);
-				const auto angleDegrees = servo_angle_degrees(servoId, rawPosition);
-
-				RCLCPP_INFO(
-					get_logger(), "Servo %d: raw position %u, angle %.2f degrees",
-					servoId, static_cast<unsigned>(rawPosition), angleDegrees);
-			}
-			catch (const std::exception &error)
-			{
-				RCLCPP_ERROR(get_logger(), "Servo %d: %s", servoId, error.what());
-				successful = false;
-			}
-		}
-		return successful && rclcpp::ok();
 	}
 
 private:
@@ -148,9 +134,8 @@ private:
 				measurement.header.stamp = now();
 				if (servoId == 6)
 				{
-					const auto openFraction = std::clamp(
-						(gripperClosedDegrees - angleDegrees) / (gripperClosedDegrees - gripperOpenDegrees),
-						0.0, 1.0);
+					const auto openFraction =
+						(gripperClosedDegrees - angleDegrees) / (gripperClosedDegrees - gripperOpenDegrees);
 					measurement.name = {"grip_joint"};
 					measurement.position = {-1.54 * openFraction};
 				}
@@ -167,6 +152,133 @@ private:
 			{
 				RCLCPP_ERROR(get_logger(), "Servo %d feedback skipped: %s", servoId, error.what());
 			}
+		}
+	}
+
+	void command_joint(const sensor_msgs::msg::JointState &command)
+	{
+		try
+		{
+			if ((command.name.size() != 1 && command.name.size() != 6) ||
+				command.position.size() != command.name.size() ||
+				!command.velocity.empty() || !command.effort.empty())
+			{
+				throw std::invalid_argument("Invalid joint command: expected one joint or all six with matching positions and no velocity or effort values");
+			}
+			constexpr std::array<const char *, 6> jointNames{
+				"arm_joint1", "arm_joint2", "arm_joint3", "arm_joint4", "arm_joint5", "grip_joint"};
+			std::array<bool, 6> requested{};
+			std::array<double, 6> targetAngles{};
+			for (std::size_t valueIndex = 0; valueIndex < command.name.size(); ++valueIndex)
+			{
+				const auto joint = std::find(jointNames.begin(), jointNames.end(), command.name[valueIndex]);
+				if (joint == jointNames.end())
+				{
+					throw std::invalid_argument("Unsupported joint name: expected arm_joint1 through arm_joint5 or grip_joint");
+				}
+				const int servoId = static_cast<int>(joint - jointNames.begin()) + 1;
+				if (requested[servoId - 1])
+				{
+					throw std::invalid_argument("Invalid joint command: duplicate joint name");
+				}
+				requested[servoId - 1] = true;
+				const double targetRadians = command.position[valueIndex];
+				const double lowerLimit = servoId == 6 ? -1.54 : -1.5708;
+				const double upperLimit = servoId == 6 ? 0.0 : (servoId == 5 ? 3.14159 : 1.5708);
+				if (!std::isfinite(targetRadians) || targetRadians < lowerLimit || targetRadians > upperLimit)
+				{
+					throw std::invalid_argument("Target is outside the model joint limits");
+				}
+				const double targetDegrees = servoId == 6
+					? gripperClosedDegrees + targetRadians * (gripperClosedDegrees - gripperOpenDegrees) / 1.54
+					: jointZeros[servoId - 1] +
+						jointDirections[servoId - 1] * targetRadians * 180.0 / std::numbers::pi;
+				const double angleRange = servoId == 5 ? 270.0 : 180.0;
+				if (targetDegrees < 0.0 || targetDegrees > angleRange)
+				{
+					throw std::invalid_argument("Target is outside the servo angle range");
+				}
+				targetAngles[servoId - 1] = targetDegrees;
+			}
+			if (std::chrono::steady_clock::now() < nextCommandTime)
+			{
+				throw std::runtime_error("Movement command cooldown active: minimum interval=" +
+					std::to_string(continuousMotion ? 500 : 2000) + " ms");
+			}
+			std::array<std::uint16_t, 6> targetPositions{};
+			const auto feedbackStart = std::chrono::steady_clock::now();
+			for (int servoId = 1; servoId <= 6; ++servoId)
+			{
+				if (!requested[servoId - 1])
+				{
+					continue;
+				}
+				const auto currentRaw = request_servo_position(servoId);
+				const auto currentDegrees = servo_angle_degrees(servoId, currentRaw);
+				const auto targetDegrees = targetAngles[servoId - 1];
+				const double angleRange = servoId == 5 ? 270.0 : 180.0;
+				const double maximumStepDegrees = servoId == 6 ? 5.0 : 3.0;
+				if (std::abs(targetDegrees - currentDegrees) > maximumStepDegrees)
+				{
+					throw std::invalid_argument("Command step exceeds servo limits: arm=3 degrees, gripper=5 degrees");
+				}
+				const auto wireDegrees = servoId >= 2 && servoId <= 4 ? 180.0 - targetDegrees : targetDegrees;
+				const double rawMinimum = servoId == 5 ? 380.0 : 900.0;
+				const double rawRange = servoId == 5 ? 3320.0 : 2200.0;
+				const int roundedRaw = static_cast<int>(std::lround(rawMinimum + wireDegrees * rawRange / angleRange));
+				const int maximumRawStep = static_cast<int>(maximumStepDegrees * rawRange / angleRange);
+				targetPositions[servoId - 1] = static_cast<std::uint16_t>(
+					std::clamp(roundedRaw, static_cast<int>(currentRaw) - maximumRawStep,
+						static_cast<int>(currentRaw) + maximumRawStep));
+			}
+			constexpr std::uint16_t durationMs = 1000;
+			std::vector<std::uint8_t> packet{0xFF, 0xFC};
+			packet.reserve(19);
+			if (command.name.size() == 6)
+			{
+				packet.insert(packet.end(), {0x11, 0x1D});
+			}
+			else
+			{
+				const auto joint = std::find(requested.begin(), requested.end(), true);
+				packet.insert(packet.end(), {0x07, static_cast<std::uint8_t>(0x11 + (joint - requested.begin()))});
+			}
+			for (std::size_t jointIndex = 0; jointIndex < requested.size(); ++jointIndex)
+			{
+				if (requested[jointIndex])
+				{
+					packet.push_back(static_cast<std::uint8_t>(targetPositions[jointIndex] >> 8));
+					packet.push_back(static_cast<std::uint8_t>(targetPositions[jointIndex] & 0xFF));
+				}
+			}
+			packet.insert(packet.end(), {
+				static_cast<std::uint8_t>(durationMs >> 8), static_cast<std::uint8_t>(durationMs & 0xFF), 0});
+			unsigned checksum = 0;
+			for (std::size_t byteIndex = 2; byteIndex < packet.size() - 1; ++byteIndex)
+			{
+				checksum += packet[byteIndex];
+			}
+			packet.back() = static_cast<std::uint8_t>(checksum);
+			rclcpp::sleep_for(std::chrono::milliseconds(12));
+			if (!rclcpp::ok())
+			{
+				throw std::runtime_error("Command cancelled before transmission: shutdown requested");
+			}
+			if (std::chrono::steady_clock::now() - feedbackStart > std::chrono::seconds(2))
+			{
+				throw std::runtime_error("Command cancelled: position read deadline exceeded (2000 ms)");
+			}
+			nextCommandTime = std::chrono::steady_clock::now() +
+				std::chrono::milliseconds(continuousMotion ? 500 : 2000);
+			write_packet(packet);
+			rclcpp::sleep_for(std::chrono::milliseconds(12));
+			sentCommandPublisher->publish(command);
+			RCLCPP_INFO(get_logger(), "Servo command transmitted: targets=%zu, duration=%u ms",
+				command.name.size(), static_cast<unsigned>(durationMs));
+		}
+		catch (const std::exception &error)
+		{
+			RCLCPP_WARN(get_logger(), "Joint command failed: %s", error.what());
 		}
 	}
 
@@ -280,7 +392,9 @@ private:
 				const unsigned maximum = servoId == 5 ? 3700 : 3100;
 				if (rawPosition < minimum || rawPosition > maximum)
 				{
-					throw std::runtime_error("Position reply is outside the expected servo range");
+					throw std::runtime_error("Position reply outside expected servo range: raw=" +
+						std::to_string(rawPosition) + ", expected=" + std::to_string(minimum) +
+						".." + std::to_string(maximum));
 				}
 				return rawPosition;
 			}
@@ -290,7 +404,7 @@ private:
 				{
 					throw;
 				}
-				RCLCPP_WARN(get_logger(), "Servo %d: retrying position request after %s", servoId, error.what());
+				RCLCPP_WARN(get_logger(), "Servo %d position request retry: %s", servoId, error.what());
 			}
 		}
 		throw std::runtime_error("Position request failed");
@@ -386,8 +500,13 @@ private:
 	std::vector<std::int64_t> jointDirections;
 	double gripperOpenDegrees;
 	double gripperClosedDegrees;
+	std::chrono::steady_clock::time_point nextCommandTime{};
 	rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr feedbackPublisher;
+	rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr sentCommandPublisher;
 	rclcpp::TimerBase::SharedPtr feedbackTimer;
+	rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr commandSubscription;
+	bool continuousMotion = false;
+	rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr motionModePublisher;
 };
 
 int main(int argc, char *argv[])
@@ -397,15 +516,8 @@ int main(int argc, char *argv[])
 	try
 	{
 		ArmDriver armDriver;
-		if (armDriver.get_parameter("continuous").as_bool())
-		{
-			rclcpp::spin(armDriver.get_node_base_interface());
-			exitCode = 0;
-		}
-		else
-		{
-			exitCode = armDriver.read_positions() ? 0 : 1;
-		}
+		rclcpp::spin(armDriver.get_node_base_interface());
+		exitCode = 0;
 	}
 	catch (const std::exception &error)
 	{

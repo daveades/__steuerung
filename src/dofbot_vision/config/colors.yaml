@@ -1,0 +1,12 @@
+/**:
+  ros__parameters:
+    minimum_area_pixels: 300.0
+    color_names: [red, green, blue, yellow]
+    colors.red.lower_hsv: [170, 80, 60]
+    colors.red.upper_hsv: [10, 255, 255]
+    colors.green.lower_hsv: [35, 80, 60]
+    colors.green.upper_hsv: [85, 255, 255]
+    colors.blue.lower_hsv: [90, 80, 60]
+    colors.blue.upper_hsv: [130, 255, 255]
+    colors.yellow.lower_hsv: [20, 80, 60]
+    colors.yellow.upper_hsv: [34, 255, 255]

@@ -12,9 +12,10 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rcl_interfaces REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 
 add_executable(main src/main.cpp)
-target_link_libraries(main PRIVATE rclcpp::rclcpp rcl_interfaces::rcl_interfaces sensor_msgs::sensor_msgs)
+target_link_libraries(main PRIVATE rclcpp::rclcpp rcl_interfaces::rcl_interfaces sensor_msgs::sensor_msgs std_msgs::std_msgs)
 install(TARGETS main DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)

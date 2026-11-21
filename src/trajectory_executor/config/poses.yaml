@@ -1,0 +1,6 @@
+pose_runner:
+  ros__parameters:
+    pose_name: home
+    position_tolerance_degrees: 2.0
+    poses.home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    poses.preview: [0.12, 0.06, -0.04, 0.03, 0.04, -0.085]
