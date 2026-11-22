@@ -1,8 +1,0 @@
-pose_runner:
-  ros__parameters:
-    pick_xyz: [0.02, 0.0, 0.42]
-    place_xyz: [0.04, 0.025, 0.42]
-    clearance_metres: 0.01
-    gripper_open_position: -0.3
-    gripper_closed_position: 0.0
-    execute: false
