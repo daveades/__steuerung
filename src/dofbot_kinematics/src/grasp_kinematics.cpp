@@ -1,4 +1,4 @@
-#include <dofbot_description/grasp_kinematics.hpp>
+#include <dofbot_kinematics/grasp_kinematics.hpp>
 
 #include <kdl/chainfksolverpos_recursive.hpp>
 #include <kdl_parser/kdl_parser.hpp>

@@ -21,7 +21,7 @@ def generate_launch_description():
             parameters=[{'robot_description': robot_description}],
             output='screen'),
         Node(
-            package='dofbot_description',
+            package='dofbot_kinematics',
             executable='grasp_reference_publisher',
             parameters=[{'robot_description': robot_description}],
             output='screen'),

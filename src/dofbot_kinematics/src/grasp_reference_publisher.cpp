@@ -2,7 +2,7 @@
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <tf2_ros/transform_broadcaster.hpp>
-#include <dofbot_description/grasp_kinematics.hpp>
+#include <dofbot_kinematics/grasp_kinematics.hpp>
 
 #include <algorithm>
 #include <cmath>
